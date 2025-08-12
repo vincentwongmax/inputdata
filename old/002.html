@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Input Form Example</title>
+    <style>
+        body { font-family: "Segoe UI", Arial, sans-serif; background: #f8f8f8; }
+        h1 { margin-bottom: 10px; }
+        form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px #ccc; max-width: 800px; margin-bottom: 20px; }
+        label { display: inline-block; width: 140px; margin-bottom: 6px; vertical-align: top; }
+        input[type="text"] { width: 180px; padding: 4px; margin-bottom: 6px; }
+        fieldset { margin-bottom: 12px; border-radius: 6px; background: #f3f3f3; }
+        legend { font-weight: bold; }
+        .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+        .row label, .row input { margin-bottom: 0; }
+        input[type="submit"] { padding: 8px 24px; font-size: 16px; border-radius: 4px; border: 1px solid #888; background: #4caf50; color: #fff; cursor: pointer; }
+        input[type="submit"]:hover { background: #388e3c; }
+        table { border-collapse: collapse; background: #fff; margin-top: 10px; }
+        th, td { padding: 6px 10px; border: 1px solid #bbb; }
+        th { background: #e0e0e0; }
+        tr:nth-child(even) { background: #f9f9f9; }
+    </style>
+</head>
+<body>
+    
+    <h3 style="text-align:center;">AOD</h3>
+    <div style="max-width:800px;margin:auto;">
+        <button id="toggleFieldsJsonBtn" type="button" style="margin-bottom:8px;">編輯欄位結構</button>
+        <div id="fieldsJsonPanel" style="display:none;">
+            <label for="fieldsJson"><b>欄位結構 JSON：</b></label>
+            <textarea id="fieldsJson" style="width:100%;height:120px;font-family:monospace;"></textarea>
+            <button id="updateFieldsBtn" type="button">更新欄位</button>
+        </div>
+    </div>
+    <form id="mainForm"></form>
+    <hr>
+    <h2>已輸入資料</h2>
+    <button id="clearAllBtn" type="button" style="margin-bottom:10px;background:#d32f2f;color:#fff;border:none;padding:6px 18px;border-radius:4px;cursor:pointer;">清除所有資料</button>
+    <button id="resetDefaultBtn" type="button" style="margin-bottom:10px;background:#1976d2;color:#fff;border:none;padding:6px 18px;border-radius:4px;cursor:pointer;margin-left:8px;">回到Default</button>
+    <input id="importTxtInput" type="file" accept=".txt" style="display:none;">
+    <button id="importTxtBtn" type="button" style="margin-bottom:10px;background:#388e3c;color:#fff;border:none;padding:6px 18px;border-radius:4px;cursor:pointer;margin-left:8px;">讀取TXT文件</button>
+    <div id="dataTable"></div>
+    <script>
+        document.getElementById('importTxtBtn').onclick = function() {
+            document.getElementById('importTxtInput').click();
+        };
+        document.getElementById('importTxtInput').onchange = function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const txt = evt.target.result;
+                // 以行分割
+                const lines = txt.split(/\r?\n/).filter(l => l.trim() !== '');
+                // 欄位順序
+                let flatFields = [];
+                fields.forEach(f => {
+                    if (f.group) {
+                        f.fields.forEach(sub => flatFields.push(sub.name));
+                    } else {
+                        flatFields.push(f.name);
+                    }
+                });
+                let imported = [];
+                lines.forEach(line => {
+                    const values = line.split('\t');
+                    let obj = {};
+                    flatFields.forEach((name, idx) => {
+                        obj[name] = values[idx] || '';
+                    });
+                    imported.push(obj);
+                });
+                records = imported;
+                localStorage.setItem('records', JSON.stringify(records));
+                renderTable();
+                alert('TXT資料已匯入！');
+            };
+            reader.readAsText(file);
+        };
+        document.getElementById('resetDefaultBtn').onclick = function() {
+            if (confirm('確定要回到預設狀態？這會清除所有資料及自訂欄位！')) {
+                const txt = records.map(r => {
+                    return Object.values(r).join('\t');
+                }).join('\n');
+                alert('資料已匯出為 TXT 檔案！');
+                const blob = new Blob([txt], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'records.txt';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                records = [];
+                localStorage.removeItem('fields');
+                localStorage.removeItem('records');
+                fieldsJson.value = JSON.stringify(fields, null, 2);
+                renderForm();
+                renderTable();
+            }
+        };
+        document.getElementById('clearAllBtn').onclick = function() {
+            if (confirm('確定要清除所有資料嗎？')) {
+                records = [];
+                localStorage.setItem('records', JSON.stringify(records));
+                renderTable();
+            }
+        };
+        // 顯示/隱藏欄位結構 JSON
+        document.getElementById('toggleFieldsJsonBtn').onclick = function() {
+            const panel = document.getElementById('fieldsJsonPanel');
+            panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+        };
+        const form = document.getElementById('mainForm');
+        const dataTable = document.getElementById('dataTable');
+        let records = [];
+        let editIndex = null;
+        let fields = [
+            { label: '部門', name: 'department' },
+            { label: 'PC名', name: 'pcname' },
+            { label: 'WIN(OS)', name: 'win' },
+            { group: 'PC information', fields: [
+                { label: 'IP', name: 'pc_ip' },
+                { label: 'HDD SIZE', name: 'pc_hdd' },
+                { label: 'RAM', name: 'pc_ram' },
+                { label: 'CPU', name: 'pc_cpu' }
+            ]},
+            { group: 'PC機身', fields: [
+                { label: '型號', name: 'pcbody_model' },
+                { label: 'PCOM', name: 'pcbody_pcom' },
+                { label: 'CAMCODE', name: 'pcbody_camcode' },
+                { label: 'S/N', name: 'pcbody_sn' }
+            ]},
+            { group: 'MON1', fields: [
+                { label: 'MON MODEL', name: 'mon1_model' },
+                { label: 'SIZE', name: 'mon1_size' },
+                { label: 'PCOM', name: 'mon1_pcom' },
+                { label: 'CAM CODE', name: 'mon1_camcode' },
+                { label: 'SN', name: 'mon1_sn' }
+            ]},
+            { group: 'MON2', fields: [
+                { label: 'MON MODEL', name: 'mon2_model' },
+                { label: 'SIZE', name: 'mon2_size' },
+                { label: 'PCOM', name: 'mon2_pcom' },
+                { label: 'CAM CODE', name: 'mon2_camcode' },
+                { label: 'SN', name: 'mon2_sn' }
+            ]}
+        ];
+
+        // 欄位 JSON 初始化
+        const fieldsJson = document.getElementById('fieldsJson');
+        fieldsJson.value = JSON.stringify(fields, null, 2);
+
+        // 讀取 localStorage
+        if (localStorage.getItem('records')) {
+            try {
+                records = JSON.parse(localStorage.getItem('records')) || [];
+            } catch(e) {
+                records = [];
+            }
+        }
+        if (localStorage.getItem('fields')) {
+            try {
+                fields = JSON.parse(localStorage.getItem('fields')) || fields;
+                fieldsJson.value = JSON.stringify(fields, null, 2);
+            } catch(e) {}
+        }
+
+        renderForm();
+        renderTable();
+
+        document.getElementById('updateFieldsBtn').onclick = function() {
+            try {
+                fields = JSON.parse(fieldsJson.value);
+                localStorage.setItem('fields', JSON.stringify(fields));
+                renderForm();
+                renderTable();
+            } catch(e) {
+                alert('JSON 格式錯誤');
+            }
+        };
+
+        function renderForm() {
+            const form = document.getElementById('mainForm');
+            form.innerHTML = '';
+            fields.forEach(f => {
+                if (f.group) {
+                    const fs = document.createElement('fieldset');
+                    const legend = document.createElement('legend');
+                    legend.textContent = f.group;
+                    fs.appendChild(legend);
+                    const row = document.createElement('div');
+                    row.className = 'row';
+                    f.fields.forEach(sub => {
+                        const label = document.createElement('label');
+                        label.htmlFor = sub.name;
+                        label.textContent = sub.label + ':';
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.id = sub.name;
+                        input.name = sub.name;
+                        row.appendChild(label);
+                        row.appendChild(input);
+                    });
+                    fs.appendChild(row);
+                    form.appendChild(fs);
+                } else {
+                    const row = document.createElement('div');
+                    row.className = 'row';
+                    const label = document.createElement('label');
+                    label.htmlFor = f.name;
+                    label.textContent = f.label + ':';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.id = f.name;
+                    input.name = f.name;
+                    row.appendChild(label);
+                    row.appendChild(input);
+                    form.appendChild(row);
+                }
+            });
+            const submit = document.createElement('input');
+            submit.type = 'submit';
+            submit.value = 'Submit';
+            form.appendChild(submit);
+        }
+
+        document.getElementById('mainForm').onsubmit = function(e) {
+            e.preventDefault();
+            const form = document.getElementById('mainForm');
+            const formData = new FormData(form);
+            let record = {};
+            formData.forEach((value, key) => {
+                record[key] = value;
+            });
+            if (editIndex !== null) {
+                records[editIndex] = record;
+                editIndex = null;
+            } else {
+                records.push(record);
+            }
+            localStorage.setItem('records', JSON.stringify(records));
+            form.reset();
+            renderTable();
+        };
+
+        function renderTable() {
+            if (records.length === 0) {
+                dataTable.innerHTML = '<i>尚未有資料</i>';
+                return;
+            }
+            let html = '<table border="1" cellpadding="5"><thead><tr>';
+            // 動態產生表頭
+            let headers = [];
+            fields.forEach(f => {
+                if (f.group) {
+                    f.fields.forEach(sub => headers.push(sub.label));
+                } else {
+                    headers.push(f.label);
+                }
+            });
+            headers.push('操作');
+            html += headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+            records.forEach((r, idx) => {
+                html += '<tr>';
+                fields.forEach(f => {
+                    if (f.group) {
+                        f.fields.forEach(sub => {
+                            html += `<td>${r[sub.name]||''}</td>`;
+                        });
+                    } else {
+                        html += `<td>${r[f.name]||''}</td>`;
+                    }
+                });
+                html += `<td>
+                    <button type="button" onclick="editRecord(${idx})">修改</button>
+                    <button type="button" onclick="deleteRecord(${idx})" style="margin-left:6px;color:#fff;background:#d32f2f;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;">刪除</button>
+                </td>`;
+                html += '</tr>';
+            });
+        window.deleteRecord = function(idx) {
+            if (confirm('確定要刪除這筆資料嗎？')) {
+                records.splice(idx, 1);
+                localStorage.setItem('records', JSON.stringify(records));
+                renderTable();
+            }
+        }
+            html += '</tbody></table>';
+            dataTable.innerHTML = html;
+            localStorage.setItem('records', JSON.stringify(records));
+        }
+
+        window.editRecord = function(idx) {
+            const r = records[idx];
+            const form = document.getElementById('mainForm');
+            fields.forEach(f => {
+                if (f.group) {
+                    f.fields.forEach(sub => {
+                        if (form.elements[sub.name]) {
+                            form.elements[sub.name].value = r[sub.name] || '';
+                        }
+                    });
+                } else {
+                    if (form.elements[f.name]) {
+                        form.elements[f.name].value = r[f.name] || '';
+                    }
+                }
+            });
+            editIndex = idx;
+            form.scrollIntoView({behavior: 'smooth'});
+        }
+    </script>
+</body>
+</html>
